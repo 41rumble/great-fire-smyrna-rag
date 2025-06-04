@@ -121,8 +121,8 @@ async def analyze_query(request: QueryRequest):
         
         # Use the hybrid QA system - just answers questions directly
         answer = await qa_system.answer_question(request.query)
-        entities_count = 10  # Estimate for general queries
-        analysis_type = "general"
+        entities_count = getattr(qa_system, 'last_entities_found', 0)  # Get actual count from QA system
+        analysis_type = query_type_detected  # Use the detected query type
         
         processing_time = time.time() - start_time
         

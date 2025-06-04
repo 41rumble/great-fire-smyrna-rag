@@ -22,6 +22,8 @@ class HybridQASystem:
         )
         self.ollama_url = "http://localhost:11434/v1/chat/completions"
         self.model = "mistral-small3.1:latest"
+        self.last_entities_found = 0  # Track entity count for server reporting
+        self.compression_used = False  # Track if compression was used
         
         # Disable Graphiti for now due to schema mismatch
         self.use_graphiti = False
@@ -44,14 +46,14 @@ class HybridQASystem:
         data = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "You are a knowledgeable historian providing detailed analysis of the Great Fire of Smyrna (1922). Write comprehensive, engaging responses that tell the historical story clearly and naturally. Use flowing narrative prose that weaves together information from multiple sources. Avoid bullet points, numbered lists, or overly formal academic structure."},
+                {"role": "system", "content": "You are a knowledgeable historian providing detailed analysis of the Great Fire of Smyrna (1922). Write comprehensive, engaging responses that tell the historical story clearly and naturally. Use flowing narrative prose that weaves together information from multiple sources. Avoid bullet points, numbered lists, repetitive phrases, or overly formal academic structure. Be concise and avoid repeating the same information."},
                 {"role": "user", "content": prompt}
             ],
             "max_tokens": max_tokens,
-            "temperature": 0.6,
-            "top_p": 0.95,
-            "frequency_penalty": 0.8,
-            "presence_penalty": 0.4
+            "temperature": 0.5,
+            "top_p": 0.9,
+            "frequency_penalty": 1.2,
+            "presence_penalty": 0.8
         }
         
         try:
@@ -63,6 +65,50 @@ class HybridQASystem:
                 return f"Error: {response.status_code}"
         except Exception as e:
             return f"Error: {e}"
+    
+    def compress_knowledge(self, full_context: str, question: str) -> str:
+        """Use LLM to intelligently compress large context while preserving relevant information"""
+        compression_prompt = f"""You are a research assistant helping to extract and summarize relevant information.
+
+QUESTION: {question}
+
+LARGE CONTEXT TO COMPRESS:
+{full_context}
+
+Your task: Extract and compress the most relevant information to answer the question. Focus on:
+1. Key characters mentioned in the question
+2. Their roles, relationships, and actions relevant to the question
+3. Important events and their consequences
+4. Historical context needed to understand the situation
+
+Provide a well-organized summary that preserves all essential information while removing redundancy and irrelevant details. Be comprehensive but concise."""
+
+        try:
+            # Use same model but with compression-focused parameters
+            data = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": "You are an expert research assistant who extracts and summarizes historical information efficiently and accurately."},
+                    {"role": "user", "content": compression_prompt}
+                ],
+                "max_tokens": 1500,  # Longer for compression task
+                "temperature": 0.3,  # More focused for summarization
+                "frequency_penalty": 0.5,
+                "presence_penalty": 0.3
+            }
+            
+            response = requests.post(self.ollama_url, json=data)
+            if response.status_code == 200:
+                result = response.json()
+                compressed = result['choices'][0]['message']['content']
+                print(f"📊 Compressed from {len(full_context)} to {len(compressed)} characters ({len(compressed)/len(full_context)*100:.1f}%)")
+                return compressed
+            else:
+                print(f"⚠️  Compression failed, using truncated context")
+                return full_context[:8000]  # Fallback to truncation
+        except Exception as e:
+            print(f"⚠️  Compression error: {e}, using truncated context")
+            return full_context[:8000]  # Fallback to truncation
     
     async def search_with_graphiti(self, question: str):
         """Use Graphiti's semantic search (if available)"""
@@ -117,8 +163,8 @@ class HybridQASystem:
             # PRIORITY ORDER: Character nodes first, then episodes
             context_parts = []
             
-            # 1. HIGHEST PRIORITY: Search for specific characters mentioned
-            character_found = False
+            # 1. BALANCED CHARACTER SEARCH: Find all relevant characters, not just first match
+            character_profiles = []
             for name in key_names:
                 # Normalize the search name (remove accents, etc.)
                 normalized_name = name.replace('ü', 'u').replace('ä', 'a').replace('ö', 'o')
@@ -130,30 +176,47 @@ class HybridQASystem:
                    OR toLower(replace(replace(c.name, 'ü', 'u'), 'ä', 'a')) CONTAINS $name
                 OPTIONAL MATCH (c)-[r:RELATES_TO]-(other)
                 RETURN c AS character, collect({other: other.name, relationship: r.type, context: r.narrative_context}) as relationships
-                LIMIT 1
+                ORDER BY c.name
                 """
                 result = session.run(character_query, {"name": name, "normalized_name": normalized_name})
+                
                 for record in result:
                     char = record["character"]
                     relationships = record["relationships"]
-                    character_found = True
                     
-                    char_info = f"AUTHORITATIVE CHARACTER PROFILE: {char.get('name', 'Unknown')}\n"
-                    char_info += f"OFFICIAL ROLE: {char.get('role', 'Unknown')}\n"
+                    char_info = f"CHARACTER: {char.get('name', 'Unknown')}\n"
+                    char_info += f"Role: {char.get('role', 'Unknown')}\n"
                     if char.get('nationality'): char_info += f"Nationality: {char['nationality']}\n"
-                    if char.get('significance'): char_info += f"Historical Significance: {char['significance']}\n"
-                    if char.get('motivations'): char_info += f"Motivations: {char['motivations']}\n"
-                    if char.get('development'): char_info += f"Character Development: {char['development']}\n"
+                    if char.get('significance'): char_info += f"Significance: {char['significance'][:200]}...\n" if len(char.get('significance', '')) > 200 else f"Significance: {char.get('significance', '')}\n"
                     
-                    # Add key relationships
-                    if relationships and any(rel['other'] for rel in relationships[:5]):
-                        char_info += "KEY HISTORICAL RELATIONSHIPS:\n"
-                        for rel in relationships[:5]:
-                            if rel['other']:
-                                char_info += f"  → {rel['other']}: {rel.get('context', 'Connected')}\n"
+                    # Add condensed relationships for balanced coverage
+                    if relationships and any(rel['other'] for rel in relationships[:3]):
+                        char_info += "Key Relationships: "
+                        rel_list = [f"{rel['other']}" for rel in relationships[:3] if rel['other']]
+                        char_info += ", ".join(rel_list) + "\n"
                     
-                    # Put character info FIRST
-                    context_parts.insert(0, char_info)
+                    character_profiles.append(char_info)
+            
+            # Add character profiles with balanced priority
+            context_parts.extend(character_profiles)
+            
+            # 1b. BROADER CHARACTER DISCOVERY: For questions about groups/roles
+            if any(term in question_lower for term in ["officials", "americans", "turkish", "military", "diplomatic"]):
+                broader_char_query = """
+                MATCH (c:Character)
+                WHERE toLower(c.role) CONTAINS 'official' 
+                   OR toLower(c.role) CONTAINS 'officer'
+                   OR toLower(c.role) CONTAINS 'ambassador'
+                   OR toLower(c.role) CONTAINS 'minister'
+                   OR toLower(c.nationality) CONTAINS 'american'
+                   OR toLower(c.nationality) CONTAINS 'turkish'
+                RETURN c.name as name, c.role as role, c.nationality as nationality
+                ORDER BY c.name
+                LIMIT 6
+                """
+                result = session.run(broader_char_query)
+                for record in result:
+                    context_parts.append(f"OFFICIAL: {record['name']} - {record['role']} ({record['nationality']})")
             
             # 2. Search episodes for broader context - MODEST INCREASE
             for word in words[:4]:
@@ -188,25 +251,46 @@ class HybridQASystem:
                     context_parts.append(event_info)
             
             print(f"🔍 Found {len(context_parts)} context sources")
-            print(f"📊 Up to 15 entities (was 10), 4 episodes per word (was 3), 1500 chars (was 1200)")
+            print(f"📊 Found {len(context_parts)} entities, using intelligent compression if needed")
             
             # DEBUG: Show what sources we're actually finding
             for i, part in enumerate(context_parts[:3]):
                 print(f"SOURCE {i+1}: {part[:100]}...")
             
-            return "\n\n".join(context_parts[:15])  # Modest increase from 10 to 15 total entities
+            # Intelligent compression: if we have too much context, compress it
+            full_context = "\n\n".join(context_parts)
+            
+            # Update entity count tracking for server
+            self.last_entities_found = len(context_parts)
+            
+            if len(full_context) > 8000:  # If context is large, compress it intelligently
+                print("🗜️  Large context detected - using intelligent compression...")
+                compressed_context = self.compress_knowledge(full_context, question)
+                # Mark that compression was used
+                self.compression_used = True
+                return compressed_context
+            else:
+                self.compression_used = False
+                return "\n\n".join(context_parts)  # Use all context if small enough
     
     async def answer_question(self, question: str):
         """Answer question using hybrid approach"""
         print(f"❓ Question: {question}")
+        
+        # Initialize entity count
+        self.last_entities_found = 0
         
         # Try Graphiti semantic search first, fall back to manual
         context = await self.search_with_graphiti(question)
         
         if not context:
             context = self.search_manually(question)
+        else:
+            # If Graphiti was used, set a default entity count
+            self.last_entities_found = 5  # Default for Graphiti results
         
         if not context:
+            self.last_entities_found = 0
             return "I couldn't find relevant information to answer your question."
         
         # Create narrative prompt
