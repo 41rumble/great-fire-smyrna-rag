@@ -1,0 +1,5 @@
+graphiti-core
+neo4j
+python-dotenv
+requests
+beautifulsoup4
