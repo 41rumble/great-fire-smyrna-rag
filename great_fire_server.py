@@ -124,6 +124,9 @@ async def analyze_query(request: QueryRequest):
         entities_count = getattr(qa_system, 'last_entities_found', 0)  # Get actual count from QA system
         analysis_type = query_type_detected  # Use the detected query type
         
+        # Debug logging for footer issues
+        print(f"🔍 Server Debug - Entities found: {entities_count}, Analysis type: {analysis_type}")
+        
         processing_time = time.time() - start_time
         
         return QueryResponse(

@@ -66,49 +66,53 @@ class HybridQASystem:
         except Exception as e:
             return f"Error: {e}"
     
-    def compress_knowledge(self, full_context: str, question: str) -> str:
-        """Use LLM to intelligently compress large context while preserving relevant information"""
-        compression_prompt = f"""You are a research assistant helping to extract and summarize relevant information.
+    def batch_compress_episodes(self, episodes: list, question: str) -> list:
+        """Compress multiple episodes in one fast LLM call"""
+        if not episodes:
+            return []
+        
+        # Build batch compression prompt
+        episodes_text = ""
+        for i, ep in enumerate(episodes, 1):
+            episodes_text += f"\n--- EPISODE {i}: {ep['name']} ---\n{ep['content'][:3000]}\n"  # Limit each episode to 3000 chars
+        
+        batch_prompt = f"""QUESTION: {question}
 
-QUESTION: {question}
+Extract ONLY relevant information from these episodes to answer the question. For each episode, provide a focused summary of relevant content.
 
-LARGE CONTEXT TO COMPRESS:
-{full_context}
+{episodes_text}
 
-Your task: Extract and compress the most relevant information to answer the question. Focus on:
-1. Key characters mentioned in the question
-2. Their roles, relationships, and actions relevant to the question
-3. Important events and their consequences
-4. Historical context needed to understand the situation
-
-Provide a well-organized summary that preserves all essential information while removing redundancy and irrelevant details. Be comprehensive but concise."""
+For each episode, write: "FROM [episode_name]: [relevant summary]" 
+Focus only on information that helps answer the question. Be concise but preserve key details."""
 
         try:
-            # Use same model but with compression-focused parameters
             data = {
                 "model": self.model,
                 "messages": [
-                    {"role": "system", "content": "You are an expert research assistant who extracts and summarizes historical information efficiently and accurately."},
-                    {"role": "user", "content": compression_prompt}
+                    {"role": "system", "content": "Extract relevant information efficiently. Write focused summaries for each episode."},
+                    {"role": "user", "content": batch_prompt}
                 ],
-                "max_tokens": 1500,  # Longer for compression task
-                "temperature": 0.3,  # More focused for summarization
-                "frequency_penalty": 0.5,
+                "max_tokens": 1200,  # Reasonable limit for batch processing
+                "temperature": 0.2,
+                "frequency_penalty": 0.4,
                 "presence_penalty": 0.3
             }
             
             response = requests.post(self.ollama_url, json=data)
             if response.status_code == 200:
                 result = response.json()
-                compressed = result['choices'][0]['message']['content']
-                print(f"📊 Compressed from {len(full_context)} to {len(compressed)} characters ({len(compressed)/len(full_context)*100:.1f}%)")
-                return compressed
+                compressed_batch = result['choices'][0]['message']['content']
+                print(f"📦 Batch compressed {len(episodes)} large episodes in one call")
+                
+                # Split the response back into individual episode summaries
+                return [compressed_batch]  # Return as single block for now
             else:
-                print(f"⚠️  Compression failed, using truncated context")
-                return full_context[:8000]  # Fallback to truncation
+                print(f"⚠️  Batch compression failed, using truncated episodes")
+                return [f"FROM {ep['name']} (truncated):\n{ep['content'][:800]}" for ep in episodes]
+                
         except Exception as e:
-            print(f"⚠️  Compression error: {e}, using truncated context")
-            return full_context[:8000]  # Fallback to truncation
+            print(f"⚠️  Batch compression error: {e}")
+            return [f"FROM {ep['name']} (truncated):\n{ep['content'][:800]}" for ep in episodes]
     
     async def search_with_graphiti(self, question: str):
         """Use Graphiti's semantic search (if available)"""
@@ -218,19 +222,36 @@ Provide a well-organized summary that preserves all essential information while 
                 for record in result:
                     context_parts.append(f"OFFICIAL: {record['name']} - {record['role']} ({record['nationality']})")
             
-            # 2. Search episodes for broader context - MODEST INCREASE
-            for word in words[:4]:
+            # 2. Search episodes for broader context - STREAMLINED  
+            large_episodes = []
+            small_episodes = []
+            
+            for word in words[:3]:  # Reduced from 4 to 3 words for speed
                 episode_query = """
                 MATCH (e:Episode)
                 WHERE toLower(e.content) CONTAINS $word
                 RETURN e.name AS name, e.content AS content
                 ORDER BY e.chapter_sequence
-                LIMIT 4
-                """  # Modest increase from 3 to 4 episodes per word
+                LIMIT 3
+                """  # Reduced to 3 episodes per word for speed
                 result = session.run(episode_query, {"word": word})
                 for record in result:
-                    content = record["content"][:1500]  # Modest increase from 1200 to 1500 chars
-                    context_parts.append(f"FROM {record['name']}:\n{content}")
+                    full_content = record["content"]
+                    episode_name = record["name"]
+                    
+                    if len(full_content) > 2000:  # Large episode
+                        large_episodes.append({"name": episode_name, "content": full_content})
+                    else:
+                        # Small episodes go directly to context
+                        small_episodes.append(f"FROM {episode_name}:\n{full_content}")
+            
+            # Add small episodes first
+            context_parts.extend(small_episodes)
+            
+            # BATCH compress large episodes (max 4 to avoid timeout)
+            if large_episodes:
+                compressed_episodes = self.batch_compress_episodes(large_episodes[:4], question)
+                context_parts.extend(compressed_episodes)
             
             # 3. Search events related to the question
             for word in words[:2]:
@@ -251,27 +272,22 @@ Provide a well-organized summary that preserves all essential information while 
                     context_parts.append(event_info)
             
             print(f"🔍 Found {len(context_parts)} context sources")
-            print(f"📊 Found {len(context_parts)} entities, using intelligent compression if needed")
+            if large_episodes:
+                print(f"📦 Streamlined: {len(large_episodes)} large episodes batch-compressed, {len(small_episodes)} small episodes kept full")
+            else:
+                print(f"📦 All episodes small enough - no compression needed")
             
             # DEBUG: Show what sources we're actually finding
             for i, part in enumerate(context_parts[:3]):
                 print(f"SOURCE {i+1}: {part[:100]}...")
             
-            # Intelligent compression: if we have too much context, compress it
-            full_context = "\n\n".join(context_parts)
-            
-            # Update entity count tracking for server
+            # Set entity count and return assembled context
             self.last_entities_found = len(context_parts)
+            final_context = "\n\n".join(context_parts)
             
-            if len(full_context) > 8000:  # If context is large, compress it intelligently
-                print("🗜️  Large context detected - using intelligent compression...")
-                compressed_context = self.compress_knowledge(full_context, question)
-                # Mark that compression was used
-                self.compression_used = True
-                return compressed_context
-            else:
-                self.compression_used = False
-                return "\n\n".join(context_parts)  # Use all context if small enough
+            print(f"📊 Final context: {len(final_context)} characters from {self.last_entities_found} entities")
+            
+            return final_context
     
     async def answer_question(self, question: str):
         """Answer question using hybrid approach"""
