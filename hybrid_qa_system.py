@@ -5,12 +5,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Only set OpenAI key if doing Graphiti search, but not required
+# Set OpenAI key for Graphiti
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 
-if False:  # Disabled graphiti import
+if OPENAI_KEY:  # Enable graphiti if API key is available
     os.environ["OPENAI_API_KEY"] = OPENAI_KEY
-    # from graphiti_core import Graphiti
+    from graphiti_core import Graphiti
+else:
+    print("⚠️  No OpenAI API key found - Graphiti disabled")
 
 from neo4j import GraphDatabase
 
@@ -25,13 +27,13 @@ class HybridQASystem:
         self.last_entities_found = 0  # Track entity count for server reporting
         self.compression_used = False  # Track if compression was used
         
-        # Disable Graphiti for now due to schema mismatch
-        self.use_graphiti = False
-        if False:  # self.use_graphiti:
+        # Enable Graphiti if OpenAI key is available
+        self.use_graphiti = bool(OPENAI_KEY)
+        if self.use_graphiti:
             try:
                 self.graphiti = Graphiti(
-                    uri=os.getenv("NEO4J_URI"),
-                    user=os.getenv("NEO4J_USERNAME"),
+                    uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+                    user=os.getenv("NEO4J_USERNAME", "neo4j"),
                     password=os.getenv("NEO4J_PASSWORD")
                 )
                 print("✅ Graphiti semantic search enabled")
@@ -92,7 +94,7 @@ Focus only on information that helps answer the question. Be concise but preserv
                     {"role": "system", "content": "Extract relevant information efficiently. Write focused summaries for each episode."},
                     {"role": "user", "content": batch_prompt}
                 ],
-                "max_tokens": 1200,  # Reasonable limit for batch processing
+                "max_tokens": 800,  # Reduced for faster processing
                 "temperature": 0.2,
                 "frequency_penalty": 0.4,
                 "presence_penalty": 0.3
@@ -121,20 +123,41 @@ Focus only on information that helps answer the question. Be concise but preserv
         
         try:
             print("🧠 Using Graphiti semantic search...")
-            results = await self.graphiti.search(question)
             
-            if results:
-                # Graphiti returns rich, structured results
-                context_parts = []
-                for i, result in enumerate(results[:5]):
-                    # Extract content from Graphiti result
-                    content = str(result)[:1000]  # Adjust based on actual structure
-                    context_parts.append(f"SOURCE {i+1}:\n{content}")
+            # Use Graphiti's semantic search with better parameters
+            results = await self.graphiti.search(
+                query=question,
+                num_results=8,  # Get more results for better coverage
+            )
+            
+            if results and hasattr(results, 'results') and len(results.results) > 0:
+                print(f"🔍 Graphiti found {len(results.results)} semantic matches")
                 
-                return "\n\n".join(context_parts)
+                context_parts = []
+                for i, result in enumerate(results.results[:6]):  # Use top 6 results
+                    # Extract episode content and metadata
+                    if hasattr(result, 'episode') and hasattr(result.episode, 'content'):
+                        content = result.episode.content
+                        name = getattr(result.episode, 'name', f"Episode {i+1}")
+                        
+                        # Add semantic relevance info
+                        context_parts.append(f"SEMANTIC MATCH: {name}\n{content[:1500]}...")
+                    elif hasattr(result, 'content'):
+                        # Alternative result structure
+                        content = result.content[:1500]
+                        context_parts.append(f"SEMANTIC MATCH {i+1}:\n{content}...")
+                
+                if context_parts:
+                    # Store count for metadata tracking
+                    self._last_graphiti_results = context_parts
+                    return "\n\n".join(context_parts)
+            
+            print("ℹ️  Graphiti search returned no results")
             
         except Exception as e:
             print(f"⚠️  Graphiti search error: {e}")
+            import traceback
+            traceback.print_exc()
         
         return None
     
@@ -248,9 +271,9 @@ Focus only on information that helps answer the question. Be concise but preserv
             # Add small episodes first
             context_parts.extend(small_episodes)
             
-            # BATCH compress large episodes (max 4 to avoid timeout)
+            # BATCH compress large episodes (max 2 for speed)
             if large_episodes:
-                compressed_episodes = self.batch_compress_episodes(large_episodes[:4], question)
+                compressed_episodes = self.batch_compress_episodes(large_episodes[:2], question)
                 context_parts.extend(compressed_episodes)
             
             # 3. Search events related to the question
@@ -322,6 +345,56 @@ Answer this question by weaving together the information from these sources into
         answer = self.call_ollama(prompt, 1200)
         
         return answer
+    
+    async def answer_question_with_metadata(self, question: str):
+        """Answer question and return both answer and metadata separately"""
+        print(f"❓ Question: {question}")
+        
+        # METADATA COLLECTION: Completely separate from content processing
+        entities_found = 0
+        
+        # Initialize entity count
+        self.last_entities_found = 0
+        
+        # Try Graphiti semantic search first, fall back to manual
+        context = await self.search_with_graphiti(question)
+        
+        if not context:
+            context = self.search_manually(question)
+            # CAPTURE entity count immediately after search, before any processing
+            entities_found = self.last_entities_found
+        else:
+            # If Graphiti was used, count semantic matches
+            # Try to count actual results from Graphiti search
+            try:
+                if hasattr(self, '_last_graphiti_results'):
+                    entities_found = len(self._last_graphiti_results)
+                else:
+                    entities_found = 6  # Default estimate for Graphiti results
+            except:
+                entities_found = 6
+        
+        if not context:
+            entities_found = 0
+            return "I couldn't find relevant information to answer your question.", entities_found
+        
+        # FOOTER METADATA IS NOW LOCKED IN - compression can't affect it
+        print(f"🔒 Footer metadata locked: {entities_found} entities found")
+        
+        # Create narrative prompt
+        prompt = f"""Question: {question}
+
+Historical sources and context:
+
+{context}
+
+Answer this question by weaving together the information from these sources into a clear, engaging narrative. Write in flowing prose that tells the historical story naturally, avoiding bullet points or numbered lists. If there's an "AUTHORITATIVE CHARACTER PROFILE" in the sources, prioritize that biographical information over episode excerpts."""
+        
+        print("🤔 Generating answer with local Ollama...")
+        answer = self.call_ollama(prompt, 1200)
+        
+        # Return answer and metadata separately 
+        return answer, entities_found
     
     def close(self):
         self.driver.close()

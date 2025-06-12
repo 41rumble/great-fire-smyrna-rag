@@ -115,26 +115,30 @@ async def analyze_query(request: QueryRequest):
     start_time = time.time()
     
     try:
+        # STEP 1: Capture footer metadata BEFORE any processing
         query_type_detected = detect_query_type(request.query)
-        answer = ""
-        entities_count = 0
+        analysis_type = query_type_detected  # Lock in analysis type immediately
         
-        # Use the hybrid QA system - just answers questions directly
-        answer = await qa_system.answer_question(request.query)
-        entities_count = getattr(qa_system, 'last_entities_found', 0)  # Get actual count from QA system
-        analysis_type = query_type_detected  # Use the detected query type
+        # STEP 2: Get answer with separate metadata tracking
+        answer, entities_found = await qa_system.answer_question_with_metadata(request.query)
+        
+        # STEP 3: Calculate processing time
+        processing_time = time.time() - start_time
+        
+        # STEP 4: Assemble footer metadata (completely separate from answer content)
+        footer_metadata = {
+            "analysis_type": analysis_type,
+            "entities_found": entities_found,
+            "processing_time": round(processing_time, 2),
+            "query_type_detected": query_type_detected
+        }
         
         # Debug logging for footer issues
-        print(f"🔍 Server Debug - Entities found: {entities_count}, Analysis type: {analysis_type}")
-        
-        processing_time = time.time() - start_time
+        print(f"🔍 Server Debug - Footer metadata: {footer_metadata}")
         
         return QueryResponse(
             answer=answer,
-            analysis_type=analysis_type,
-            entities_found=entities_count,
-            processing_time=round(processing_time, 2),
-            query_type_detected=query_type_detected
+            **footer_metadata
         )
         
     except Exception as e:
