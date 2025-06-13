@@ -81,9 +81,15 @@ class OllamaEmbedder(EmbedderClient):
         self.model_name = model_name
         self.base_url = base_url
     
-    async def create(self, text: str) -> List[float]:
+    async def create(self, input_data) -> List[float]:
         """Create single embedding"""
         try:
+            # Handle different input types
+            if isinstance(input_data, list):
+                text = " ".join(str(item) for item in input_data)
+            else:
+                text = str(input_data)
+            
             response = requests.post(
                 f"{self.base_url}/api/embeddings",
                 json={
@@ -96,7 +102,7 @@ class OllamaEmbedder(EmbedderClient):
                 return response.json().get("embedding", [])
             else:
                 print(f"❌ Embedding failed for text: {text[:50]}...")
-                return [0.0] * 768  # Fallback
+                return [0.0] * 768  # Fallback - matches nomic-embed-text dimensions
                 
         except Exception as e:
             print(f"❌ Embedding error: {e}")
@@ -135,8 +141,8 @@ async def setup_graphiti_with_local():
             return
         
         # Test embedder
-        test_embeddings = await embedder.create_batch(["test"])
-        if test_embeddings and len(test_embeddings[0]) > 0:
+        test_embedding = await embedder.create("test")
+        if test_embedding and len(test_embedding) > 0:
             print("✅ Embedder (nomic-embed-text) working")
         else:
             print("❌ Embedder test failed")
@@ -153,6 +159,7 @@ async def setup_graphiti_with_local():
         uri="bolt://localhost:7687",
         user="neo4j",
         password="Sk1pper(())",
+        database="the-great-fire-db",
         llm_client=llm_client,
         embedder=embedder
     )

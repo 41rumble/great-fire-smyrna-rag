@@ -1,0 +1,143 @@
+{
+  "book_metadata": {
+    "title": "Waking the Lion",
+    "author": "Roger L. Jennings",
+    "year": 2015,
+    "isbn": "9781498452991",
+    "pages": 214,
+    "extracted_at": "2025-06-13T16:30:28.928772"
+  },
+  "chapters": [
+    {
+      "section_number": 1,
+      "title": "Dedicated to",
+      "start_page": 16,
+      "end_page": 16,
+      "text_file": "waking_the_lion_section_001_Dedicated to.txt",
+      "word_count": 383
+    },
+    {
+      "section_number": 2,
+      "title": "Ottoman Turk Rule over Greece",
+      "start_page": 15,
+      "end_page": 28,
+      "text_file": "waking_the_lion_section_002_Ottoman Turk Rule over Greece.txt",
+      "word_count": 4890
+    },
+    {
+      "section_number": 3,
+      "title": "The Megali Idea",
+      "start_page": 29,
+      "end_page": 36,
+      "text_file": "waking_the_lion_section_003_The Megali Idea.txt",
+      "word_count": 2969
+    },
+    {
+      "section_number": 4,
+      "title": "The Greek Army Enters Smyrna",
+      "start_page": 37,
+      "end_page": 46,
+      "text_file": "waking_the_lion_section_004_The Greek Army Enters Smyrna.txt",
+      "word_count": 3677
+    },
+    {
+      "section_number": 5,
+      "title": "The Greek Army is Defeated",
+      "start_page": 47,
+      "end_page": 54,
+      "text_file": "waking_the_lion_section_005_The Greek Army is Defeated.txt",
+      "word_count": 2883
+    },
+    {
+      "section_number": 6,
+      "title": "The American Relief Committee",
+      "start_page": 55,
+      "end_page": 98,
+      "text_file": "waking_the_lion_section_006_The American Relief Committee.txt",
+      "word_count": 16631
+    },
+    {
+      "section_number": 7,
+      "title": "What Made Jennings Different",
+      "start_page": 99,
+      "end_page": 110,
+      "text_file": "waking_the_lion_section_007_What Made Jennings Different.txt",
+      "word_count": 3786
+    },
+    {
+      "section_number": 8,
+      "title": "Arranging the Rescue",
+      "start_page": 111,
+      "end_page": 144,
+      "text_file": "waking_the_lion_section_008_Arranging the Rescue.txt",
+      "word_count": 9998
+    },
+    {
+      "section_number": 9,
+      "title": "The Plight of the Refugees",
+      "start_page": 145,
+      "end_page": 149,
+      "text_file": "waking_the_lion_section_009_The Plight of the Refugees.txt",
+      "word_count": 1119
+    },
+    {
+      "section_number": 10,
+      "title": "The Future",
+      "start_page": 150,
+      "end_page": 169,
+      "text_file": "waking_the_lion_section_010_The Future.txt",
+      "word_count": 7120
+    },
+    {
+      "section_number": 11,
+      "title": "Gazi Mustafa Kemal Ataturk",
+      "start_page": 170,
+      "end_page": 170,
+      "text_file": "waking_the_lion_section_011_Gazi Mustafa Kemal Ataturk.txt",
+      "word_count": 226
+    },
+    {
+      "section_number": 12,
+      "title": "Captain Ioannis Theofanides",
+      "start_page": 42,
+      "end_page": 42,
+      "text_file": "waking_the_lion_section_012_Captain Ioannis Theofanides.txt",
+      "word_count": 367
+    },
+    {
+      "section_number": 13,
+      "title": "Eleftherios Venizelos",
+      "start_page": 26,
+      "end_page": 70,
+      "text_file": "waking_the_lion_section_013_Eleftherios Venizelos.txt",
+      "word_count": 16801
+    },
+    {
+      "section_number": 14,
+      "title": "Metropolitan Chrysostomos of Smyrna",
+      "start_page": 71,
+      "end_page": 199,
+      "text_file": "waking_the_lion_section_014_Metropolitan Chrysostomos of Smyrna.txt",
+      "word_count": 42069
+    },
+    {
+      "section_number": 15,
+      "title": "The Hardships of Early America",
+      "start_page": 200,
+      "end_page": 212,
+      "text_file": "waking_the_lion_section_015_The Hardships of Early America.txt",
+      "word_count": 4769
+    },
+    {
+      "section_number": 16,
+      "title": "About the Author",
+      "start_page": 213,
+      "end_page": 214,
+      "text_file": "waking_the_lion_section_016_About the Author.txt",
+      "word_count": 445
+    }
+  ],
+  "total_chapters": 16,
+  "processing_date": "2025-06-13T16:30:37.573134",
+  "detection_method": "toc_based"
+}
