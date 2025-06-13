@@ -156,10 +156,9 @@ async def setup_graphiti_with_local():
     print("🧠 Initializing Graphiti with local models...")
     
     graphiti = Graphiti(
-        uri="bolt://localhost:7687",
+        uri="bolt://localhost:7687/the-great-fire-db",
         user="neo4j",
         password="Sk1pper(())",
-        database="the-great-fire-db",
         llm_client=llm_client,
         embedder=embedder
     )
