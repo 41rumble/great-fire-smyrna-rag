@@ -108,13 +108,19 @@ class OllamaEmbedder(EmbedderClient):
             print(f"❌ Embedding error: {e}")
             return [0.0] * 768  # Fallback
     
-    async def create_batch(self, texts: List[str]) -> List[List[float]]:
-        """Create batch embeddings"""
-        embeddings = []
+    async def create_batch(self, input_data_list: List[str]) -> List[List[float]]:
+        """Create batch embeddings - called by Graphiti for various content types"""
+        # Only show if there's actually content to embed
+        if len(input_data_list) > 0:
+            print(f"🔢 Embedding {len(input_data_list)} items...")
         
-        for text in texts:
-            embedding = await self.create(text)
+        embeddings = []
+        for input_data in input_data_list:
+            embedding = await self.create(input_data)
             embeddings.append(embedding)
+        
+        if len(embeddings) > 0:
+            print(f"✅ Generated {len(embeddings)} embeddings")
         
         return embeddings
 
