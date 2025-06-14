@@ -21,13 +21,9 @@ async def proper_book_ingestion():
     print("📚 PROPER BOOK INGESTION WITH GRAPHITI")
     print("=" * 60)
     
-    # Clean database for fresh start
-    print("🧹 Cleaning database for fresh ingestion...")
-    driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "Sk1pper(())"))
-    with driver.session() as session:
-        session.run("MATCH (n) DETACH DELETE n")
-    driver.close()
-    print("✅ Database cleaned")
+    # NO DATABASE CLEANING - preserve existing knowledge graph
+    print("📚 Connecting to existing knowledge graph...")
+    print("✅ Preserving existing entities and facts")
     
     # Initialize Graphiti properly
     neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')

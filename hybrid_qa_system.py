@@ -32,11 +32,12 @@ class HybridQASystem:
         if self.use_graphiti:
             try:
                 self.graphiti = Graphiti(
-                    uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-                    user=os.getenv("NEO4J_USERNAME", "neo4j"),
-                    password=os.getenv("NEO4J_PASSWORD")
+                    uri="bolt://localhost:7687",
+                    user="neo4j",
+                    password="Sk1pper(())"
                 )
-                print("✅ Graphiti semantic search enabled")
+                print("✅ Graphiti multi-book semantic search enabled")
+                print("📚 Connected to multi-book knowledge graph (3 historical books)")
             except Exception as e:
                 print(f"⚠️  Graphiti unavailable, falling back to manual search: {e}")
                 self.use_graphiti = False
@@ -48,7 +49,7 @@ class HybridQASystem:
         data = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "You are a knowledgeable historian providing detailed analysis of the Great Fire of Smyrna (1922). Write comprehensive, engaging responses that tell the historical story clearly and naturally. Use flowing narrative prose that weaves together information from multiple sources. Avoid bullet points, numbered lists, repetitive phrases, or overly formal academic structure. Be concise and avoid repeating the same information."},
+                {"role": "system", "content": "You are a knowledgeable historian providing detailed analysis of the Great Fire of Smyrna crisis (1922) using information from multiple historical sources including 'Flames on the Water', 'Waking the Lion', and 'The Great Fire'. Write comprehensive, engaging responses that tell the historical story clearly and naturally, comparing perspectives across different books when relevant. Use flowing narrative prose that weaves together information from multiple sources. When information comes from specific sources, naturally mention which book provides that perspective. Avoid bullet points, numbered lists, repetitive phrases, or overly formal academic structure. Be concise and avoid repeating the same information."},
                 {"role": "user", "content": prompt}
             ],
             "max_tokens": max_tokens,
@@ -117,40 +118,78 @@ Focus only on information that helps answer the question. Be concise but preserv
             return [f"FROM {ep['name']} (truncated):\n{ep['content'][:800]}" for ep in episodes]
     
     async def search_with_graphiti(self, question: str):
-        """Use Graphiti's semantic search (if available)"""
+        """Use Graphiti's semantic search across multiple books"""
         if not self.use_graphiti:
             return None
         
         try:
-            print("🧠 Using Graphiti semantic search...")
+            print("🧠 Using Graphiti multi-book semantic search...")
             
-            # Use Graphiti's semantic search with better parameters
+            # Use Graphiti's semantic search with better parameters for multi-book
             results = await self.graphiti.search(
                 query=question,
-                num_results=8,  # Get more results for better coverage
+                num_results=10,  # Get more results for better multi-book coverage
             )
             
-            if results and hasattr(results, 'results') and len(results.results) > 0:
-                print(f"🔍 Graphiti found {len(results.results)} semantic matches")
+            if results and len(results) > 0:
+                print(f"🔍 Graphiti found {len(results)} semantic matches across all books")
                 
                 context_parts = []
-                for i, result in enumerate(results.results[:6]):  # Use top 6 results
-                    # Extract episode content and metadata
-                    if hasattr(result, 'episode') and hasattr(result.episode, 'content'):
-                        content = result.episode.content
-                        name = getattr(result.episode, 'name', f"Episode {i+1}")
+                book_sources = {}
+                
+                for i, result in enumerate(results[:8]):  # Use top 8 results
+                    # Handle the new Graphiti result structure (relationships with facts)
+                    if hasattr(result, 'fact') and result.fact:
+                        fact = result.fact
                         
-                        # Add semantic relevance info
-                        context_parts.append(f"SEMANTIC MATCH: {name}\n{content[:1500]}...")
+                        # Get source information from episodes
+                        episode_sources = []
+                        if hasattr(result, 'episodes') and result.episodes:
+                            # Look up episode names from Neo4j
+                            with self.driver.session() as session:
+                                for episode_id in result.episodes[:2]:  # Check first 2 episodes
+                                    ep_result = session.run("""
+                                    MATCH (e:Episodic) 
+                                    WHERE e.uuid = $episode_id
+                                    RETURN e.name
+                                    """, episode_id=episode_id)
+                                    
+                                    for record in ep_result:
+                                        episode_name = record['e.name']
+                                        if episode_name:
+                                            # Extract book name
+                                            if episode_name.startswith('Flames On The Water'):
+                                                book = 'Flames on the Water'
+                                            elif episode_name.startswith('Waking The Lion'):
+                                                book = 'Waking the Lion'
+                                            elif 'great' in episode_name.lower() and 'fire' in episode_name.lower():
+                                                book = 'The Great Fire'
+                                            else:
+                                                book = 'Historical Source'
+                                            
+                                            episode_sources.append(f"{book}: {episode_name}")
+                                            book_sources[book] = book_sources.get(book, 0) + 1
+                        
+                        # Format the result with source tracking
+                        source_info = " | ".join(episode_sources[:2]) if episode_sources else "Historical Source"
+                        context_parts.append(f"FACT ({source_info}):\n{fact}\n")
+                    
                     elif hasattr(result, 'content'):
-                        # Alternative result structure
-                        content = result.content[:1500]
-                        context_parts.append(f"SEMANTIC MATCH {i+1}:\n{content}...")
+                        # Fallback for different result structure
+                        content = result.content[:1000]
+                        context_parts.append(f"SEMANTIC MATCH {i+1}:\n{content}...\n")
                 
                 if context_parts:
-                    # Store count for metadata tracking
+                    # Store results and book distribution for metadata tracking
                     self._last_graphiti_results = context_parts
-                    return "\n\n".join(context_parts)
+                    self._book_distribution = book_sources
+                    
+                    # Add book summary to context
+                    if book_sources:
+                        book_summary = ", ".join([f"{book} ({count})" for book, count in book_sources.items()])
+                        print(f"📚 Results from: {book_summary}")
+                    
+                    return "\n".join(context_parts)
             
             print("ℹ️  Graphiti search returned no results")
             
@@ -165,7 +204,7 @@ Focus only on information that helps answer the question. Be concise but preserv
         """Enhanced manual search using Neo4j with comprehensive entity lookup"""
         print("🔍 Using enhanced Neo4j search...")
         
-        with self.driver.session(database="the-great-fire-db") as session:
+        with self.driver.session() as session:
             # Extract key entities from question
             key_names = []
             question_lower = question.lower()
@@ -322,11 +361,13 @@ Focus only on information that helps answer the question. Be concise but preserv
         # Try Graphiti semantic search first, fall back to manual
         context = await self.search_with_graphiti(question)
         
-        if not context:
-            context = self.search_manually(question)
-        else:
+        if context:
+            self._last_search_method = "graphiti_semantic"
             # If Graphiti was used, set a default entity count
             self.last_entities_found = 5  # Default for Graphiti results
+        else:
+            context = self.search_manually(question)
+            self._last_search_method = "neo4j_manual"
         
         if not context:
             self.last_entities_found = 0
@@ -359,13 +400,9 @@ Answer this question by weaving together the information from these sources into
         # Try Graphiti semantic search first, fall back to manual
         context = await self.search_with_graphiti(question)
         
-        if not context:
-            context = self.search_manually(question)
-            # CAPTURE entity count immediately after search, before any processing
-            entities_found = self.last_entities_found
-        else:
+        if context:
+            self._last_search_method = "graphiti_semantic"
             # If Graphiti was used, count semantic matches
-            # Try to count actual results from Graphiti search
             try:
                 if hasattr(self, '_last_graphiti_results'):
                     entities_found = len(self._last_graphiti_results)
@@ -373,6 +410,11 @@ Answer this question by weaving together the information from these sources into
                     entities_found = 6  # Default estimate for Graphiti results
             except:
                 entities_found = 6
+        else:
+            context = self.search_manually(question)
+            self._last_search_method = "neo4j_manual"
+            # CAPTURE entity count immediately after search, before any processing
+            entities_found = self.last_entities_found
         
         if not context:
             entities_found = 0

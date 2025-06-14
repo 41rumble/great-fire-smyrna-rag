@@ -438,17 +438,24 @@ def split_pdf_by_pages_pdfplumber(pdf, output_dir, book_prefix, book_metadata, p
     return chunks
 
 def main():
-    """Main function with example usage"""
+    """Main function with command line argument support"""
+    import sys
     
-    # Configuration
-    pdf_file = "Waking the Lion - Roger L. Jennings.pdf"
+    # Get PDF file from command line argument or use default
+    if len(sys.argv) > 1:
+        pdf_file = sys.argv[1]
+    else:
+        pdf_file = "Waking the Lion - Roger L. Jennings.pdf"
+        print("💡 No PDF file specified, using default")
+    
     output_folder = "./text_files"
     
     # Check if PDF exists
     if not os.path.exists(pdf_file):
         print(f"❌ PDF file not found: {pdf_file}")
-        print("💡 Update the pdf_file variable with the correct path")
-        print("📁 Place your PDF in the current directory or update the path")
+        if len(sys.argv) <= 1:
+            print("💡 Usage: python breakup_pdf.py 'path/to/your/book.pdf'")
+        print("📁 Make sure the PDF file exists and the path is correct")
         return
     
     try:

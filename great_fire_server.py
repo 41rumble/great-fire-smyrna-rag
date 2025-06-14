@@ -24,6 +24,9 @@ class QueryResponse(BaseModel):
     entities_found: int
     processing_time: float
     query_type_detected: str
+    search_method: str = "unknown"
+    books_referenced: Optional[Dict[str, int]] = None
+    graphiti_enabled: bool = False
 
 @app.on_event("startup")
 async def startup_event():
@@ -130,7 +133,10 @@ async def analyze_query(request: QueryRequest):
             "analysis_type": analysis_type,
             "entities_found": entities_found,
             "processing_time": round(processing_time, 2),
-            "query_type_detected": query_type_detected
+            "query_type_detected": query_type_detected,
+            "search_method": getattr(qa_system, '_last_search_method', 'unknown'),
+            "books_referenced": getattr(qa_system, '_book_distribution', None),
+            "graphiti_enabled": qa_system.use_graphiti
         }
         
         # Debug logging for footer issues

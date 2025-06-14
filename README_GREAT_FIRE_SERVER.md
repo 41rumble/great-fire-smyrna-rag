@@ -1,28 +1,29 @@
-# Great Fire of Smyrna Hybrid QA Server
+# Great Fire of Smyrna Multi-Book QA Server
 
-A sophisticated FastAPI server providing deep narrative analysis of "The Great Fire of Smyrna" (1922) with hybrid semantic search capabilities and integration for Open WebUI.
+A sophisticated FastAPI server providing deep narrative analysis of the Great Fire of Smyrna crisis (1922) using **multiple historical sources** with hybrid semantic search capabilities and integration for Open WebUI.
 
 ## Features
 
-🧠 **Hybrid Semantic Search**
-- **Graphiti integration** with OpenAI embeddings for semantic understanding
+🧠 **Multi-Book Semantic Search**
+- **Graphiti integration** with OpenAI embeddings across 3 historical books
+- **Cross-book entity resolution** connecting same people/events across sources
+- **Source provenance tracking** showing which book provides each fact
 - **Neo4j fallback** for precise manual queries and character profiles
 - **Intelligent compression** of large content with query-specific relevance
-- **Dynamic analysis types** based on query patterns
 
-🎭 **Deep Narrative Analysis**
-- Character arc development and emotional journeys
-- Story progression through different acts
-- Complex relationship exploration
-- Thematic analysis and symbolic meaning
-- Temporal flow and chronological analysis
+🎭 **Cross-Source Historical Analysis**
+- Compare different perspectives on the same events
+- Character development across multiple accounts
+- Cross-reference historical facts between sources
+- Thematic analysis drawing from multiple narratives
+- Source-aware answers showing book origins
 
-📚 **Enhanced Knowledge Graph**
-- Rich historical context from hybrid knowledge system
-- 36 chapters with semantic embeddings and narrative analysis
-- Character relationships with motivational depth
-- Political, military, and humanitarian perspectives
-- Cross-temporal relationship evolution tracking
+📚 **Multi-Book Knowledge Graph**
+- **3 Historical Books**: "Flames on the Water", "Waking the Lion", "The Great Fire"
+- **500+ entities** extracted (people, places, events, organizations)
+- **Cross-book relationships** linking shared historical figures
+- **Source tracking** for each fact and relationship
+- **Semantic search** across all content simultaneously
 
 🔌 **Advanced Integration**
 - FastAPI server with comprehensive metadata tracking
@@ -88,16 +89,20 @@ Main analysis endpoint for questions about The Great Fire of Smyrna.
 }
 ```
 
-**Response (Enhanced with Metadata):**
+**Response (Enhanced with Multi-Book Metadata):**
 ```json
 {
-  "answer": "Detailed narrative analysis...",
+  "answer": "Detailed cross-book narrative analysis...",
   "analysis_type": "character_analysis",
   "entities_found": 12,
   "processing_time": 4.2,
   "query_type_detected": "character_analysis",
-  "search_method": "hybrid_semantic",
-  "compression_applied": true,
+  "search_method": "graphiti_semantic",
+  "books_referenced": {
+    "Flames on the Water": 3,
+    "Waking the Lion": 2,
+    "The Great Fire": 1
+  },
   "graphiti_enabled": true
 }
 ```
@@ -150,32 +155,32 @@ The server automatically connects to:
 - **With OpenAI key**: Hybrid semantic search → Neo4j fallback → compression
 - **Without OpenAI key**: Enhanced Neo4j manual search only
 
-## Example Queries
+## Example Multi-Book Queries
 
-**Character Analysis:**
-- "How did Jennings' motivations change throughout the evacuation?"
-- "What was Atatürk's emotional journey during the crisis?"
-- "Analyze Bristol's character development"
+**Cross-Book Character Analysis:**
+- "How does Asa Jennings appear differently in 'Waking the Lion' vs 'Flames on the Water'?"
+- "Which book provides the most detail on Admiral Bristol's personality?"
+- "Compare how different sources portray Mustafa Kemal Atatürk"
 
-**Story Progression:**
-- "How does the narrative build to the climax?"
-- "What are the key turning points in the story?"
-- "How does tension develop throughout the chapters?"
+**Source Comparison:**
+- "Which book has the most information about the Armenian evacuation?"
+- "How do the three books differ in their coverage of American involvement?"
+- "What perspectives on Turkish nationalism emerge across the sources?"
 
-**Relationships:**
-- "What was the dynamic between Jennings and Atatürk?"
-- "How did American-Turkish relations evolve?"
-- "Explore the connection between military and humanitarian efforts"
+**Cross-Reference Queries:**
+- "What do all three books say about the September 1922 fire?"
+- "How do different authors describe the refugee crisis?"
+- "Which source provides the most detail on Greek military actions?"
 
-**Themes (Semantic Search):**
-- "What underlying tensions existed between different cultural perspectives?"
-- "How did concepts of leadership evolve throughout the crisis?"
-- "What implicit conflicts emerged between humanitarian and political goals?"
+**Thematic Cross-Analysis:**
+- "How do humanitarian themes develop across different accounts?"
+- "What contrasting views of American foreign policy emerge?"
+- "How does the portrayal of Ottoman collapse vary between sources?"
 
-**Temporal Analysis:**
-- "How do events unfold chronologically in September 1922?"
-- "What is the pacing of the evacuation sequence?"
-- "How do past events influence present actions?"
+**Source-Aware Research:**
+- "Find facts about Jennings that appear in multiple books"
+- "Which book covers the naval evacuation in most detail?"
+- "Compare different accounts of the final days in Smyrna"
 
 ## Architecture
 
